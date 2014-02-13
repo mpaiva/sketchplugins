@@ -1,0 +1,346 @@
+// Align to Object
+// v.04c
+// This command aligns selected layers or groups to a âkey objectâ within the selection. Alignments are specified as follows: L = Left, R = Right, T = Top, B = Bottom, H = Horizontal Center, V = Vertical Center, C = Center. The key object is designated by its position in the layer stack, from the bottom upwards: 1, 2, 3, etc. (If no object is specified, the bottom layer in the selection becomes the key object.)
+// As an example, H1 indicates Horizontal Center alignment to the 1st or bottom object. T3 indicates Top alignment to the 3rd object. L indicates Left alignment to the bottom object (the default key object).
+// Objects may be aligned along both axes by combining letters. For example, use TL, TR, BL, or BR for corners. For midpoints, use LC, RC, TC, BC.
+// Center alignments (H, V, C) may shift objects off-pixel, resulting in blurred edges. To correct for this, a "Snap to pixel" option is included. This feature may be toggled off by holding the Option key while running the command, and its default setting may be adjusted within the script.
+
+// Copyright (c) 2013â2014 Doug Downing. All rights reserved.
+// Email: drawingkit@dougdowning.com // Website: www.dougdowning.com
+
+
+// USER VARIABLES
+// Horizontal and vertical center alignments may shift objects off-pixel. To correct for this, set "snapToPixel" to true; otherwise, for mathematically precise results, set to false.
+
+var snapToPixel = true;
+
+// The following variable is experimental and allows for relative alignment (from the top left only) across artboards or groups. It can be accessed by holding the Command key while running the command or you may make it the default behavior by setting it to true.
+
+var relativeAlign = false;
+
+var tooltip = true; 	// To allow tooltip for modifer key
+
+
+// SCRIPT STARTS HERE
+
+if (selection != null && selection.length() >=2) {
+
+	// Modifier key: Option ++++++++++++++++++
+
+	var modFlagOption = Math.pow(2,19);
+	var modFlagCommand = Math.pow(2,20);
+	var modFlags = [NSEvent modifierFlags];
+	var modifier;
+	if (modFlags & modFlagOption) {
+		modifier = "opt"; snapToPixel = !snapToPixel;
+	}
+	if (modFlags & modFlagCommand) {
+		modifier = "cmd"; relativeAlign = !relativeAlign;
+	}
+
+	// Parsing input ++++++++++++++++++
+
+	var input = [doc askForUserInput:"Choose L, R, T, B, H, V, C. Add layer number." initialValue:"V1"]
+
+	// Test first and last characters (isNaN = letter) and slice string
+	var letter, number;
+	if ((isNaN(input.charAt(0)) == true) && (isNaN(input.charAt(1)) == true)) {
+		letter = input.slice(0,2); // 1st 2 characters
+		number = input.slice(2); // remaining characters
+		}
+	else if (isNaN(input.charAt(0)) == true) {
+		letter = input.slice(0,1); // 1st character
+		number = input.slice(1); // remaining characters
+		}
+	else if ((isNaN(input.charAt(input.length()-1)) == true) && (isNaN(input.charAt(input.length()-2)) == true)) {
+		letter = input.slice(-2); // last 2 characters
+		number = input.slice(0, input.length()-2); // remaining characters
+		}
+	else if (isNaN(input.charAt(input.length()-1)) == true) {
+		letter = input.slice(-1); // last character
+		number = input.slice(0, input.length()-1); // remaining characters
+		}
+	else {
+		letter = "V";
+		number = input;
+	}
+	// Align: Compare to array, set to V as default backup
+	var align = letter.toUpperCase();
+	var alignValues = new Array('L','R','T','B','H','V','C','TL','TR','BL','BR','LC','RC','TC','BC');
+	
+	if (align.length == 2) {
+		// Inversions + equivalents
+		if (align == 'LT') {align = 'TL';}
+		else if (align == 'RT') {align = 'TR';}
+		else if (align == 'LB') {align = 'BL';}
+		else if (align == 'RB') {align = 'BR';}
+		else if (['CL','LV','VL'].indexOf(align) > -1) {align = 'LC';}
+		else if (['CR','RV','VR'].indexOf(align) > -1) {align = 'RC';}
+		else if (['CT','TH','HT'].indexOf(align) > -1) {align = 'TC';}
+		else if (['CB','BH','HB'].indexOf(align) > -1) {align = 'BC';}
+		else if (['VH','HV','CC'].indexOf(align) > -1) {align = 'C';}
+		// Common errors
+		else if (['TV','VT'].indexOf(align) > -1) {align = 'TC';}
+		else if (['BV','VB'].indexOf(align) > -1) {align = 'BC';}
+		else if (['LH','HL'].indexOf(align) > -1) {align = 'LC';}
+		else if (['RH','HR'].indexOf(align) > -1) {align = 'RC';}
+	}
+	// If no match found, set to V
+	if (alignValues.indexOf(align) == -1) {align = 'V';}
+
+	// Key object: Fix index #, set to 0 as backup (for NaN or 0 input)
+	var keyIndex = number - 1;
+	if (isNaN(keyIndex) == true || keyIndex  selection.length()-1) {keyIndex = selection.length()-1;}
+
+	if (relativeAlign == false) {
+		var keyObj = selection[keyIndex].absoluteRect();
+	}
+	else {
+		var keyObj = selection[keyIndex].frame();
+	}
+
+	// Set alignment +++++++++++++++++++
+	var left = new Array('L','TL','BL','LC');
+	var right = new Array('R','TR','BR','RC');
+	var bottom = new Array('B','BL','BR','BC');
+	var top = new Array('T','TL','TR','TC');
+	var hCenter = new Array('H','TC','BC');
+	var vCenter = new Array('V','LC','RC');
+	var center = new Array('C');
+
+	for (var i=0; i -1) {
+			rect.setX(keyObj.minX());
+		}
+		else if (right.indexOf(align) > -1) {
+			rect.setMaxX(keyObj.maxX());
+		}
+		if (top.indexOf(align) > -1) {
+			rect.setY(keyObj.minY());
+		}
+		else if (bottom.indexOf(align) > -1) {
+			rect.setMaxY(keyObj.maxY());
+		}
+		if (hCenter.indexOf(align) > -1) {
+			rect.setMidX(keyObj.midX());
+		}
+		else if (vCenter.indexOf(align) > -1) {
+			rect.setMidY(keyObj.midY());
+		}
+		else if (center.indexOf(align) > -1) {
+			rect.setMidX(keyObj.midX());
+			rect.setMidY(keyObj.midY());
+		}
+	}
+
+	// Snap to pixel ++++++++++++++++++++
+
+	var roundable = new Array();
+	var allCenter = hCenter.concat(vCenter,center);
+	if (allCenter.indexOf(align) > -1) {
+		for (var i=0; i -1 || center.indexOf(align) > -1) {
+				if (rect.minX() != Math.round(rect.minX())) {roundable.push(rect.minX())}
+				if (snapToPixel == true) {rect.setX(Math.round(rect.minX()));}
+			}
+			if (vCenter.indexOf(align) > -1 || center.indexOf(align) > -1) {
+				if (rect.minY() != Math.round(rect.minY())) {roundable.push(rect.minY())}
+				if (snapToPixel == true) {rect.setY(Math.round(rect.minY()));}
+			}
+		}
+	}
+
+	// Tooltip
+	
+	if (tooltip == true && modifier != "opt" && roundable.length >= 1) {
+		if (snapToPixel == true) {doc.showMessage("Option (â¥): âSnap to pixelâ off")}
+		else {doc.showMessage("Option (â¥): Snap to pixel")}
+	
+	}
+
+} // end if (selection.length() >=2)
+
+else if (selection != null && selection.length() > 0 && selection[0].className() == "MSSliceLayer") {}
+
+else {doc.showMessage("Select at least 2 objects, including a âkeyâ object.")}
+
+
+// NOTES
+// Thanks to Jeff Biggus (HyperJeff, Inc.) for help with modifier keys!
+// Center alignment suggested by Guido Schetters.
+
+// This script is not to be distributed, shared, modified, etc. without written permission of the author. (See copyright notice above.)
+// The script is provided âas is", to be used at your own risk, with no warranties of any kind, whether expressed or implied. Under no circumstances shall the author be liable for direct, indirect, special, incidental, or consequential damages resulting from the use, misuse, or inability to use this script.
+
+// ---------------------------------------------------------------
+// Align to Object
+// v.04c
+// This command aligns selected layers or groups to a âkey objectâ within the selection. Alignments are specified as follows: L = Left, R = Right, T = Top, B = Bottom, H = Horizontal Center, V = Vertical Center, C = Center. The key object is designated by its position in the layer stack, from the bottom upwards: 1, 2, 3, etc. (If no object is specified, the bottom layer in the selection becomes the key object.)
+// As an example, H1 indicates Horizontal Center alignment to the 1st or bottom object. T3 indicates Top alignment to the 3rd object. L indicates Left alignment to the bottom object (the default key object).
+// Objects may be aligned along both axes by combining letters. For example, use TL, TR, BL, or BR for corners. For midpoints, use LC, RC, TC, BC.
+// Center alignments (H, V, C) may shift objects off-pixel, resulting in blurred edges. To correct for this, a "Snap to pixel" option is included. This feature may be toggled off by holding the Option key while running the command, and its default setting may be adjusted within the script.
+
+// Copyright (c) 2013â2014 Doug Downing. All rights reserved.
+// Email: drawingkit@dougdowning.com // Website: www.dougdowning.com
+
+
+// USER VARIABLES
+// Horizontal and vertical center alignments may shift objects off-pixel. To correct for this, set "snapToPixel" to true; otherwise, for mathematically precise results, set to false.
+
+var snapToPixel = true;
+
+// The following variable is experimental and allows for relative alignment (from the top left only) across artboards or groups. It can be accessed by holding the Command key while running the command or you may make it the default behavior by setting it to true.
+
+var relativeAlign = false;
+
+var tooltip = true; 	// To allow tooltip for modifer key
+
+
+// SCRIPT STARTS HERE
+
+if (selection != null && selection.length() >=2) {
+
+	// Modifier key: Option ++++++++++++++++++
+
+	var modFlagOption = Math.pow(2,19);
+	var modFlagCommand = Math.pow(2,20);
+	var modFlags = [NSEvent modifierFlags];
+	var modifier;
+	if (modFlags & modFlagOption) {
+		modifier = "opt"; snapToPixel = !snapToPixel;
+	}
+	if (modFlags & modFlagCommand) {
+		modifier = "cmd"; relativeAlign = !relativeAlign;
+	}
+
+	// Parsing input ++++++++++++++++++
+
+	var input = [doc askForUserInput:"Choose L, R, T, B, H, V, C. Add layer number." initialValue:"V1"]
+
+	// Test first and last characters (isNaN = letter) and slice string
+	var letter, number;
+	if ((isNaN(input.charAt(0)) == true) && (isNaN(input.charAt(1)) == true)) {
+		letter = input.slice(0,2); // 1st 2 characters
+		number = input.slice(2); // remaining characters
+		}
+	else if (isNaN(input.charAt(0)) == true) {
+		letter = input.slice(0,1); // 1st character
+		number = input.slice(1); // remaining characters
+		}
+	else if ((isNaN(input.charAt(input.length()-1)) == true) && (isNaN(input.charAt(input.length()-2)) == true)) {
+		letter = input.slice(-2); // last 2 characters
+		number = input.slice(0, input.length()-2); // remaining characters
+		}
+	else if (isNaN(input.charAt(input.length()-1)) == true) {
+		letter = input.slice(-1); // last character
+		number = input.slice(0, input.length()-1); // remaining characters
+		}
+	else {
+		letter = "V";
+		number = input;
+	}
+	// Align: Compare to array, set to V as default backup
+	var align = letter.toUpperCase();
+	var alignValues = new Array('L','R','T','B','H','V','C','TL','TR','BL','BR','LC','RC','TC','BC');
+	
+	if (align.length == 2) {
+		// Inversions + equivalents
+		if (align == 'LT') {align = 'TL';}
+		else if (align == 'RT') {align = 'TR';}
+		else if (align == 'LB') {align = 'BL';}
+		else if (align == 'RB') {align = 'BR';}
+		else if (['CL','LV','VL'].indexOf(align) > -1) {align = 'LC';}
+		else if (['CR','RV','VR'].indexOf(align) > -1) {align = 'RC';}
+		else if (['CT','TH','HT'].indexOf(align) > -1) {align = 'TC';}
+		else if (['CB','BH','HB'].indexOf(align) > -1) {align = 'BC';}
+		else if (['VH','HV','CC'].indexOf(align) > -1) {align = 'C';}
+		// Common errors
+		else if (['TV','VT'].indexOf(align) > -1) {align = 'TC';}
+		else if (['BV','VB'].indexOf(align) > -1) {align = 'BC';}
+		else if (['LH','HL'].indexOf(align) > -1) {align = 'LC';}
+		else if (['RH','HR'].indexOf(align) > -1) {align = 'RC';}
+	}
+	// If no match found, set to V
+	if (alignValues.indexOf(align) == -1) {align = 'V';}
+
+	// Key object: Fix index #, set to 0 as backup (for NaN or 0 input)
+	var keyIndex = number - 1;
+	if (isNaN(keyIndex) == true || keyIndex  selection.length()-1) {keyIndex = selection.length()-1;}
+
+	if (relativeAlign == false) {
+		var keyObj = selection[keyIndex].absoluteRect();
+	}
+	else {
+		var keyObj = selection[keyIndex].frame();
+	}
+
+	// Set alignment +++++++++++++++++++
+	var left = new Array('L','TL','BL','LC');
+	var right = new Array('R','TR','BR','RC');
+	var bottom = new Array('B','BL','BR','BC');
+	var top = new Array('T','TL','TR','TC');
+	var hCenter = new Array('H','TC','BC');
+	var vCenter = new Array('V','LC','RC');
+	var center = new Array('C');
+
+	for (var i=0; i -1) {
+			rect.setX(keyObj.minX());
+		}
+		else if (right.indexOf(align) > -1) {
+			rect.setMaxX(keyObj.maxX());
+		}
+		if (top.indexOf(align) > -1) {
+			rect.setY(keyObj.minY());
+		}
+		else if (bottom.indexOf(align) > -1) {
+			rect.setMaxY(keyObj.maxY());
+		}
+		if (hCenter.indexOf(align) > -1) {
+			rect.setMidX(keyObj.midX());
+		}
+		else if (vCenter.indexOf(align) > -1) {
+			rect.setMidY(keyObj.midY());
+		}
+		else if (center.indexOf(align) > -1) {
+			rect.setMidX(keyObj.midX());
+			rect.setMidY(keyObj.midY());
+		}
+	}
+
+	// Snap to pixel ++++++++++++++++++++
+
+	var roundable = new Array();
+	var allCenter = hCenter.concat(vCenter,center);
+	if (allCenter.indexOf(align) > -1) {
+		for (var i=0; i -1 || center.indexOf(align) > -1) {
+				if (rect.minX() != Math.round(rect.minX())) {roundable.push(rect.minX())}
+				if (snapToPixel == true) {rect.setX(Math.round(rect.minX()));}
+			}
+			if (vCenter.indexOf(align) > -1 || center.indexOf(align) > -1) {
+				if (rect.minY() != Math.round(rect.minY())) {roundable.push(rect.minY())}
+				if (snapToPixel == true) {rect.setY(Math.round(rect.minY()));}
+			}
+		}
+	}
+
+	// Tooltip
+	
+	if (tooltip == true && modifier != "opt" && roundable.length >= 1) {
+		if (snapToPixel == true) {doc.showMessage("Option (â¥): âSnap to pixelâ off")}
+		else {doc.showMessage("Option (â¥): Snap to pixel")}
+	
+	}
+
+} // end if (selection.length() >=2)
+
+else if (selection != null && selection.length() > 0 && selection[0].className() == "MSSliceLayer") {}
+
+else {doc.showMessage("Select at least 2 objects, including a âkeyâ object.")}
+
+
+// NOTES
+// Thanks to Jeff Biggus (HyperJeff, Inc.) for help with modifier keys!
+// Center alignment suggested by Guido Schetters.
+
+// This script is not to be distributed, shared, modified, etc. without written permission of the author. (See copyright notice above.)
+// The script is provided âas is", to be used at your own risk, with no warranties of any kind, whether expressed or implied. Under no circumstances shall the author be liable for direct, indirect, special, incidental, or consequential damages resulting from the use, misuse, or inability to use this script.
+
+// ---------------------------------------------------------------
